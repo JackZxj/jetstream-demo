@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: js-demo-edge
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: js-demo-edge
+  template:
+    metadata:
+      labels:
+        name: js-demo-edge
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "10.110.26.178"
+      containers:
+      - name: demo
+        image: 172.31.0.7:5000/js-demo:v0.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: NATS_URL
+          value: nats://s1:s1@nats-edge-0.nats-edge.default.svc.cluster.local:4222
+        - name: ROLE
+          value: edge
+        - name: SUBJECT
+          value: mysqldb2.1
+        - name: STREAM
+          value: mysqldb2
+        - name: CONSUMER
+          value: mysqldb2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: js-demo-cloud
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: js-demo-cloud
+  template:
+    metadata:
+      labels:
+        name: js-demo-cloud
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/node: "true"
+      containers:
+      - name: demo
+        image: 172.31.0.7:5000/js-demo:v0.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: NATS_URL
+          value: nats://ce1:ce1@nats-cloud-0.nats-cloud.default.svc.cluster.local:4222
+        - name: ROLE
+          value: cloud
+        - name: SUBJECT
+          value: mysqldb2.1
+        - name: STREAM
+          value: mysqldb2
+        - name: CONSUMER
+          value: mysqldb2
