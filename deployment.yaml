@@ -17,7 +17,7 @@ spec:
         kubernetes.io/hostname: "10.110.26.178"
       containers:
       - name: demo
-        image: 172.31.0.7:5000/js-demo:v0.1
+        image: 172.31.0.7:5000/js-demo:v0.5
         imagePullPolicy: IfNotPresent
         env:
         - name: NATS_URL
@@ -50,7 +50,7 @@ spec:
         node-role.kubernetes.io/node: "true"
       containers:
       - name: demo
-        image: 172.31.0.7:5000/js-demo:v0.1
+        image: 172.31.0.7:5000/js-demo:v0.5
         imagePullPolicy: IfNotPresent
         env:
         - name: NATS_URL

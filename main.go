@@ -68,13 +68,13 @@ func main() {
 	if strings.ToLower(ROLE) == "edge" {
 		for {
 			currentTime := time.Now().Format("2006-01-02 15:04:05")
-			data := fmt.Sprintf("Edge: Hello, can you hellp me? %s", currentTime)
+			data := fmt.Sprintf("Hello, can you hear me?\t[Edge time: %s]", currentTime)
 			msg, err := nc.Request(SUBJECT, []byte(data), 1*time.Second)
 			if err != nil {
 				log.Fatal("Request error: ", err)
 			}
 			sleepTime := 5 + rand.Intn(10)
-			log.Printf("MSG: %s . Sleep time: %d ", msg.Data, sleepTime)
+			log.Printf("MSG: %s \t Sleep time: %ds ", msg.Data, sleepTime)
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 		}
 	} else if strings.ToLower(ROLE) == "cloud" {
@@ -107,7 +107,14 @@ func main() {
 			if err != nil {
 				fatalIfNotPull()
 			}
-			kingpin.FatalIfError(err, "no message received")
+			if err != nil {
+				if err == nats.ErrTimeout {
+					log.Println("no message received")
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				log.Fatal("Got an error:", err)
+			}
 
 			if msg.Header != nil && msg.Header.Get("Status") == "503" {
 				fatalIfNotPull()
@@ -133,19 +140,14 @@ func main() {
 					}
 				}
 			}
-			fmt.Println("Data:")
-			fmt.Println(string(msg.Data))
+			fmt.Println("Data: ",string(msg.Data))
+
+			err = msg.Respond(nil)
+			kingpin.FatalIfError(err, "could not Acknowledge message")
+			nc.Flush()
+			fmt.Println("Acknowledged message: ")
 			fmt.Println()
 			time.Sleep(5 * time.Second)
-
-			// subj := fmt.Sprintf("$JS.API.CONSUMER.MSG.NEXT.%s.%s", STREAM, CONSUMER)
-			// msg, err := nc.Request(subj, []byte("1"), 1*time.Second)
-			// if err != nil {
-			// 	log.Fatal("Request error: ", err)
-			// }
-			// sleepTime := 5 + rand.Intn(10)
-			// log.Printf("MSG: %s . Sleep time: %d ", msg.Data, sleepTime)
-			// time.Sleep(time.Duration(sleepTime) * time.Second)
 		}
 	} else {
 		log.Fatal("I don't know what to do when I play this role: ", ROLE)
