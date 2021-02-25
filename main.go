@@ -78,6 +78,8 @@ func main() {
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 		}
 	} else if strings.ToLower(ROLE) == "cloud" {
+		// Copyright:
+		// https://github.com/nats-io/natscli/blob/968d32e6253a78231812a107c830d55cf37200aa/nats/consumer_command.go#L717
 		timeout := 5 * time.Second
 		jsopts := []jsm.Option{
 			jsm.WithTimeout(timeout),
