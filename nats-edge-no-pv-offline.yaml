@@ -1,0 +1,212 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-edge-config
+data:
+  nats.conf: |
+    pid_file: "/var/run/nats/nats.pid"
+    http: 8222
+
+    # 1.服务器名称以及连接地址
+    server_name : "edge1"
+    listen : 0.0.0.0:4222
+
+    # 2. 设置NATS通信传输相关参数
+    ## NATS 单条消息最大大小，默认为1Mb
+    max_payload : 1Mb
+    ## NATS 缓冲消息大小
+    max_pending : 4Gb
+    ## NATS 向消费者传输消息时的等待时间，超过此时间限制仍无法投递成功，则消费者会认作slow_consumer，连接被断开
+    write_deadline : "2s"
+    ## 最大支持的客户端连接数量，默认为64K
+    max_connections : 64K
+
+    # 3.日志记录相关参数
+    ## 是否将日志持久化的文件，默认输出的标志输出上
+    # log_file : "edge1_log"
+    ## 日志是否启用时间戳，默认启用
+    ## logtime = false
+    ## 是否记录debug 日志信息,默认为false
+    ## debug = true
+    ## 是否记录每条发送/接收的消息(不包含系统账户的消息)，默认为false
+    ## trace = true
+    ## 日志文件大小限制。超过此限制会滚动生成新的日志文件，默认值为0，无限制
+    ## log_size_limit : 500Mb
+    ## 单条日志消息大小的限制，默认为0，无限制
+    ## max_traced_msg_len : 1Mb
+
+    #4. jestream 相关配置，配置此字段后默认启用jetstream功能
+    jetstream {
+    ## 持久化文件存储位置,使用$server_name来引用第二行已经定义的server_name变量
+      store_dir : "/data/jetstream/store"
+    ## 设置内存以及磁盘存储限制
+      max_mem : 2Gb
+    ## 设置jetstream持久化时使用的最大的磁盘空间
+      max_file : 10Gb
+    }
+
+    # 5.账户配置
+    accounts {
+    ## 用于从边缘节点1向外部发送数据的账户Send_1
+        Send_1 : {
+    ## 是否使用jetstream功能进行持久化
+          jetstream : enable 
+            users :[
+    ## 用于客户端连接到Send_1的用户名以及密码
+                {user:"s1",password:"s1"}
+            ]
+        }
+    }
+    # 6.LeafNode配置
+    leafnodes {
+    ## 连接到远端服务器的地址
+        remotes :[
+    ### 使用e1用户登录，此用户对应云服务器内预先设定好的用户名/密码，仅用于leafnode的连接。客户端API不感知。（对于需要连接到此节点的客户端，仅需要指定ip/port即可连接)
+            {url:nats-leaf://e1:e1@10.253.0.83:7422,account : Send_1} #只有当客户端使用EDGE账户下的用户登录时才会启用此条leadnode连接，连接到云服务器中l1用户对应的account 
+        ]
+    }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-edge
+  labels:
+    app: nats-edge
+spec:
+  selector:
+    app: nats-edge
+  clusterIP: None
+  ports:
+  - name: client
+    port: 4222
+  - name: cluster
+    port: 6222
+  - name: monitor
+    port: 8222
+  - name: metrics
+    port: 7777
+  - name: leafnodes
+    port: 7422
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats-edge
+  labels:
+    app: nats-edge
+spec:
+  selector:
+    matchLabels:
+      app: nats-edge
+  replicas: 1
+  serviceName: "nats-edge"
+  # volumeClaimTemplates:
+  # - metadata:
+  #     name: nats-edge-sts-vol
+  #   spec:
+  #     accessModes:
+  #     - ReadWriteOnce
+  #     volumeMode: "Filesystem"
+  #     resources:
+  #       requests:
+  #         storage: 10Gi
+  template:
+    metadata:
+      labels:
+        app: nats-edge
+    spec:
+      hostNetwork: true
+      #############################################
+      #                                           #
+      # Select k8s node                           #
+      #                                           #
+      #############################################
+      nodeSelector:
+        kubernetes.io/hostname: "centos78-edge-0"
+      volumes:
+      - name: config-volume
+        configMap:
+          name: nats-edge-config
+      - name: pid
+        emptyDir: {}
+      - name: nats-edge-sts-vol
+        emptyDir: {}
+
+      # Required to be able to HUP signal and apply config reload
+      # to the server without restarting the pod.
+      shareProcessNamespace: true
+
+      #################
+      #               #
+      #  NATS Server  #
+      #               #
+      #################
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: nats
+        image: synadia/nats-server:nightly
+        ports:
+        - containerPort: 4222
+          name: client
+        - containerPort: 7422
+          name: leafnodes
+        - containerPort: 6222
+          name: cluster
+        - containerPort: 8222
+          name: monitor
+        - containerPort: 7777
+          name: metrics
+        command:
+         - "nats-server"
+         - "--config"
+         - "/etc/nats-config/nats.conf"
+
+        # Required to be able to define an environment variable
+        # that refers to other environment variables.  This env var
+        # is later used as part of the configuration file.
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLUSTER_ADVERTISE
+          value: $(POD_NAME).nats-edge.$(POD_NAMESPACE).svc
+        volumeMounts:
+          - name: config-volume
+            mountPath: /etc/nats-config
+          - name: pid
+            mountPath: /var/run/nats
+          - name: nats-edge-sts-vol
+            mountPath: /data/jetstream
+
+        # Liveness/Readiness probes against the monitoring
+        #
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+
+        # Gracefully stop NATS Server on pod deletion or image upgrade.
+        #
+        lifecycle:
+          preStop:
+            exec:
+              # Using the alpine based NATS image, we add an extra sleep that is
+              # the same amount as the terminationGracePeriodSeconds to allow
+              # the NATS Server to gracefully terminate the client connections.
+              #
+              command: ["/bin/sh", "-c", "/nats-server -sl=ldm=/var/run/nats/nats.pid && /bin/sleep 60"]

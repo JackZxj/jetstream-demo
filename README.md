@@ -1,5 +1,8 @@
 # jetstream demo
 
++ nats cluster 安装详见 [ec-co.md](ec-co.md)
++ 单向网络测试详见 [One-way_network_test.md](One-way_network_test.md)
+
 ## 效果
 
 1. edge 端每隔 5~14 秒 (间隔随机) 发送一条消息

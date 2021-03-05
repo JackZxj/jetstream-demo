@@ -1,0 +1,309 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-cloud-config
+data:
+  nats.conf: |
+    pid_file: "/var/run/nats/nats.pid"
+
+    # 1.定义服务器名字和端口号，同一集群中的不同服务器名字和地址不能相同
+    server_name : "cloud1"
+    ## 此端口号用于监听客户端连接。默认为4222
+    port : 4222 
+    ### 也可以使用listen字段来指定ip和端口号，
+    ### listen : 0.0.0.0:4222
+    ## http监听端口，可用于监控客户端连接以及服务器状态
+    http_port : 8222
+    ### 也可以使用http来指定ip和端口号
+    ### http : localhost:8222
+
+    # 2. 设置NATS通信传输相关参数
+    ## NATS 单条消息最大大小，默认为1Mb
+    max_payload : 1Mb
+    ## NATS 缓冲消息大小
+    max_pending : 4Gb
+    ## NATS 向消费者传输消息时的等待时间，超过此时间限制仍无法投递成功，则消费者会认作slow_consumer，连接被断开
+    write_deadline : "2s"
+    ## 最大支持的客户端连接数量，默认为64K
+    max_connections : 64K
+
+    # 3.日志记录相关参数
+    ## 是否将日志持久化的文件，默认输出的标志输出上。日志文件默认保存在启动目录下
+    # log_file : "cloud_log"
+    ## 日志是否启用时间戳，默认启用
+    ## logtime = false
+    ## 是否记录debug 日志信息,默认为false
+    ## debug = true
+    ## 是否记录每条发送/接收的消息(不包含系统账户的消息)，默认为false
+    ## trace = true
+    ## 日志文件大小限制。超过此限制会滚动生成新的日志文件，默认值为0，无限制
+    ## log_size_limit : 500Mb
+    ## 单条日志消息大小的限制，默认为0，无限制
+    ## max_traced_msg_len : 1Mb
+
+
+    # 4. jestream 相关配置，配置此字段后默认启用jetstream功能
+    jetstream {
+    ## 持久化文件存储位置,使用$server_name来引用第二行已经定义的server_name变量
+      store_dir : "/data/jetstream/store"
+    ## 设置内存以及磁盘存储限制
+      max_mem : 2Gb
+    ## 设置jetstream持久化时使用的最大的磁盘空间
+      max_file : 10Gb
+    }
+
+    #############################################
+    #                                           #
+    # Accounts resolver config                  #
+    #                                           #
+    #############################################
+    # 5.服务器账户配置
+    accounts {
+    ## 账户CLOUD ，用于云服务器端数据的持久化
+      CLOUD : {
+    ## 该账户是否启用jetstream功能
+      jetstream : enable 
+    ## 账户CLOUD的用户列表
+      users : [
+          {user : cloud,password:cloud}
+        ]
+      }
+
+    ## 用于边缘节点1的作为源端的账户
+      Edge_1 : {
+        users : [
+          { user : ce1,password:ce1}
+        ]
+      }
+      
+    ## 用于边缘节点2的作为源端的账户
+      Edge_2 : {
+        users : [
+          { user : ce2,password:ce2}
+        ]
+      }
+    }
+
+    #############################################
+    # Advertise the public ip of the Kubelet    #
+    # where this NATS Server node is running    #
+    #############################################
+    # 6.启用叶节点配置
+    leafnodes {
+    ## 启用叶节点监听端口
+      listen : "0.0.0.0:7422"
+    ## 设置叶节点连接认证信息
+    ## 当新的路由创建时，首先在accounts上创建专用的路由accounts，之后在此处增加字段进行映射。此处的用户名密码用于叶节点连接云服务器，和accounts字段中的用户名密码无关
+      authorization {
+      users =[
+          {user :c1,password:c1,account:CLOUD} #叶节点使用用户c1登录时，该叶节点会被认作本服务器CLOUD账户中的一员
+          {user : e1,password:e1,account:Edge_1}
+          {user : e2,password:e2,account:Edge_2}
+        ]
+      }
+    }
+
+    # 7.JetStream集群设置，Jetstream集群使用raft协议，因此至少需要三个节点才能正常使用
+    cluster {
+    ## 集群的名字，集群内部必须统一
+      name : JSC  
+    ## 设置监听集群服务器连接的地址。必须设置
+      listen : 0.0.0.0:6222  
+    ## 设置集群中服务器的路由地址，主动加入
+      routes : [
+        nats://nats-cloud-0.nats-cloud.default.svc.cluster.local:6222
+      ]
+
+      cluster_advertise: $CLUSTER_ADVERTISE
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-cloud
+  labels:
+    app: nats-cloud
+spec:
+  selector:
+    app: nats-cloud
+  clusterIP: None
+  ports:
+  - name: client
+    port: 4222
+  - name: cluster
+    port: 6222
+  - name: monitor
+    port: 8222
+  - name: metrics
+    port: 7777
+  - name: leafnodes
+    port: 7422
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats-cloud
+  labels:
+    app: nats-cloud
+spec:
+  selector:
+    matchLabels:
+      app: nats-cloud
+  replicas: 3
+  serviceName: "nats-cloud"
+  # volumeClaimTemplates:
+  # - metadata:
+  #     name: nats-cloud-sts-vol
+  #   spec:
+  #     accessModes:
+  #     - ReadWriteOnce
+  #     volumeMode: "Filesystem"
+  #     resources:
+  #       requests:
+  #         storage: 10Gi
+  template:
+    metadata:
+      labels:
+        app: nats-cloud
+    spec:
+      #############################################
+      #                                           #
+      # Select k8s node                           #
+      #                                           #
+      #############################################
+      nodeSelector:
+        node-role.kubernetes.io/node: "true"
+      # Common volumes for the containers
+      volumes:
+      - name: config-volume
+        configMap:
+          name: nats-cloud-config
+      - name: pid
+        emptyDir: {}
+      - name: nats-cloud-sts-vol
+        emptyDir: {}
+
+      # Required to be able to HUP signal and apply config reload
+      # to the server without restarting the pod.
+      shareProcessNamespace: true
+
+      #################
+      #               #
+      #  NATS Server  #
+      #               #
+      #################
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: nats
+        image: synadia/nats-server:nightly
+        ports:
+        - containerPort: 4222
+          name: client
+          hostPort: 4222
+        - containerPort: 7422
+          name: leafnodes
+          hostPort: 7422
+        - containerPort: 6222
+          name: cluster
+        - containerPort: 8222
+          name: monitor
+        - containerPort: 7777
+          name: metrics
+        command:
+         - "nats-server"
+         - "--config"
+         - "/etc/nats-config/nats.conf"
+
+        # Required to be able to define an environment variable
+        # that refers to other environment variables.  This env var
+        # is later used as part of the configuration file.
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLUSTER_ADVERTISE
+          value: $(POD_NAME).nats-cloud.$(POD_NAMESPACE).svc
+        volumeMounts:
+          - name: config-volume
+            mountPath: /etc/nats-config
+          - name: pid
+            mountPath: /var/run/nats
+          - name: nats-cloud-sts-vol
+            mountPath: /data/jetstream
+        # Disable all cpu limits for the server.
+        #
+        resources:
+          requests:
+            cpu: 0
+
+        # Liveness/Readiness probes against the monitoring
+        #
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+
+        # Gracefully stop NATS Server on pod deletion or image upgrade.
+        #
+        lifecycle:
+          preStop:
+            exec:
+              # Using the alpine based NATS image, we add an extra sleep that is
+              # the same amount as the terminationGracePeriodSeconds to allow
+              # the NATS Server to gracefully terminate the client connections.
+              #
+              command: ["/bin/sh", "-c", "/nats-server -sl=ldm=/var/run/nats/nats.pid && /bin/sleep 60"]
+
+      #################################
+      #                               #
+      #  NATS Configuration Reloader  #
+      #                               #
+      #################################
+      - name: reloader
+        image: connecteverything/nats-server-config-reloader:0.6.0
+        command:
+         - "nats-server-config-reloader"
+         - "-pid"
+         - "/var/run/nats/nats.pid"
+         - "-config"
+         - "/etc/nats-config/nats.conf"
+        volumeMounts:
+          - name: config-volume
+            mountPath: /etc/nats-config
+          - name: pid
+            mountPath: /var/run/nats
+
+      ##############################
+      #                            #
+      #  NATS Prometheus Exporter  #
+      #                            #
+      ##############################
+      - name: metrics
+        image: synadia/prometheus-nats-exporter:0.5.0
+        args:
+        - -connz
+        - -routez
+        - -subz
+        - -varz
+        - -prefix=nats
+        - -use_internal_server_id
+        - -DV
+        - http://localhost:8222/
+        ports:
+        - containerPort: 7777
+          name: metrics
+
