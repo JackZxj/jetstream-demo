@@ -9,7 +9,7 @@ data:
     http: 8222
 
     # 1.服务器名称以及连接地址
-    server_name : "edge1"
+    server_name : $POD_NAME
     listen : 0.0.0.0:4222
 
     # 2. 设置NATS通信传输相关参数
@@ -63,9 +63,7 @@ data:
     ## 连接到远端服务器的地址
         remotes :[
     ### 使用e1用户登录，此用户对应云服务器内预先设定好的用户名/密码，仅用于leafnode的连接。客户端API不感知。（对于需要连接到此节点的客户端，仅需要指定ip/port即可连接)
-            {url:nats-leaf://e1:e1@nats-cloud-0.nats-cloud.default.svc.cluster.local:7422,account : Send_1} #只有当客户端使用EDGE账户下的用户登录时才会启用此条leadnode连接，连接到云服务器中l1用户对应的account 
-            {url:nats-leaf://e1:e1@nats-cloud-1.nats-cloud.default.svc.cluster.local:7422,account : Send_1} #只有当客户端使用EDGE账户下的用户登录时才会启用此条leadnode连接，连接到云服务器中l1用户对应的account 
-            {url:nats-leaf://e1:e1@nats-cloud-2.nats-cloud.default.svc.cluster.local:7422,account : Send_1} #只有当客户端使用EDGE账户下的用户登录时才会启用此条leadnode连接，连接到云服务器中l1用户对应的account 
+            {url:nats-leaf://e1:e1@nats-cloud.default.svc.cluster.local:7422,account : Send_1} #只有当客户端使用EDGE账户下的用户登录时才会启用此条leadnode连接，连接到云服务器中l1用户对应的account 
         ]
     }
 

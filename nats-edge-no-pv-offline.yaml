@@ -9,7 +9,7 @@ data:
     http: 8222
 
     # 1.服务器名称以及连接地址
-    server_name : "edge1"
+    server_name : $POD_NAME
     listen : 0.0.0.0:4222
 
     # 2. 设置NATS通信传输相关参数

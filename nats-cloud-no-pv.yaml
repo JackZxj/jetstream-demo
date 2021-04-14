@@ -8,7 +8,7 @@ data:
     pid_file: "/var/run/nats/nats.pid"
 
     # 1.定义服务器名字和端口号，同一集群中的不同服务器名字和地址不能相同
-    server_name : "cloud1"
+    server_name : $POD_NAME
     ## 此端口号用于监听客户端连接。默认为4222
     port : 4222 
     ### 也可以使用listen字段来指定ip和端口号，
@@ -112,7 +112,7 @@ data:
       listen : 0.0.0.0:6222  
     ## 设置集群中服务器的路由地址，主动加入
       routes : [
-        nats://nats-cloud-0.nats-cloud.default.svc.cluster.local:6222
+        nats://nats-cloud.default.svc.cluster.local:6222
       ]
 
       cluster_advertise: $CLUSTER_ADVERTISE
@@ -200,10 +200,8 @@ spec:
         ports:
         - containerPort: 4222
           name: client
-          hostPort: 4222
         - containerPort: 7422
           name: leafnodes
-          hostPort: 7422
         - containerPort: 6222
           name: cluster
         - containerPort: 8222
