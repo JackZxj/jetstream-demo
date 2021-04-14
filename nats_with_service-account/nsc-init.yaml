@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nsc-init
+spec:
+  template:
+    metadata:
+      name: nsc-init
+    spec:
+      containers:
+        - name: nsc-init
+          image: natsio/nats-box:latest
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "nsc add operator -n inspur && nsc add account -n SYS && nsc add user -n sys && nsc edit operator --system-account=SYS"
+          volumeMounts:
+            - name: nfs
+              mountPath: "/nsc"
+      restartPolicy: Never
+      volumes:
+        - name: nfs
+          nfs:
+            server: 172.19.0.5
+            path: "/"

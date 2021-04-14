@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nsc-2init
+spec:
+  template:
+    metadata:
+      name: nsc-2init
+    spec:
+      containers:
+        - name: nsc-2init
+          image: natsio/nats-box:latest
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "nsc edit operator --account-jwt-server-url nats://nats-cloud.default.svc.cluster.local:4222 --service-url=nats://nats-cloud.default.svc.cluster.local:4222 && nsc push --all"
+          volumeMounts:
+            - name: nfs
+              mountPath: "/nsc"
+      restartPolicy: Never
+      volumes:
+        - name: nfs
+          nfs:
+            server: 172.19.0.5
+            path: "/"

@@ -1,0 +1,12 @@
+---
+apiVersion: jetstream.nats.io/v1beta1
+kind: Stream
+metadata:
+  name: samplestr
+spec:
+  name: samplestr
+  subjects: ["samplestr.*"]
+  storage: memory
+  maxAge: 1h
+  replicas: 1
+  servers: ["nats://nats-edge.default.svc.cluster.local:4222"]

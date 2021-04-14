@@ -1,0 +1,152 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-cloud-config
+data:
+  nats.conf: |
+    pid_file: "/var/run/nats/nats.pid"
+    server_name : $POD_NAME
+    port : 4222
+    http_port : 8222
+    max_payload : 1Mb
+    max_pending : 4Gb
+    write_deadline : "2s"
+    max_connections : 64K
+
+    jetstream {
+      store_dir : "/data/jetstream/store"
+      max_mem : 2Gb
+      max_file : 10Gb
+    }
+
+    operator: /nsc/accounts/nats/inspur/inspur.jwt
+    resolver: {
+      type : "full"
+      dir : "/nsc/jwt"
+      allow_delete : true
+      interval : "2m"
+      limit : 9999
+    }
+
+    leafnodes {
+      listen : "0.0.0.0:7422"
+    }
+
+    cluster {
+      name : JSC
+      listen : 0.0.0.0:6222
+      routes : [nats://nats-cloud.default.svc.cluster.local:6222]
+      cluster_advertise: $CLUSTER_ADVERTISE
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-cloud
+  labels:
+    app: nats-cloud
+spec:
+  selector:
+    app: nats-cloud
+  clusterIP: None
+  ports:
+  - name: client
+    port: 4222
+  - name: cluster
+    port: 6222
+  - name: monitor
+    port: 8222
+  - name: metrics
+    port: 7777
+  - name: leafnodes
+    port: 7422
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats-cloud
+  labels:
+    app: nats-cloud
+spec:
+  selector:
+    matchLabels:
+      app: nats-cloud
+  replicas: 3
+  serviceName: "nats-cloud"
+  template:
+    metadata:
+      labels:
+        app: nats-cloud
+    spec:
+      volumes:
+      - name: nfs
+        nfs:
+          server: 172.19.0.5
+          path: "/"
+      - name: config-volume
+        configMap:
+          name: nats-cloud-config
+      - name: pid
+        emptyDir: {}
+      - name: nats-cloud-sts-vol
+        emptyDir: {}
+      shareProcessNamespace: true
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: nats
+        image: synadia/nats-server:nightly-20210412
+        ports:
+        - containerPort: 4222
+          name: client
+        - containerPort: 7422
+          name: leafnodes
+        - containerPort: 6222
+          name: cluster
+        - containerPort: 8222
+          name: monitor
+        - containerPort: 7777
+          name: metrics
+        command:
+         - "nats-server"
+         - "--config"
+         - "/etc/nats-config/nats.conf"
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLUSTER_ADVERTISE
+          value: $(POD_NAME).nats-cloud.$(POD_NAMESPACE).svc
+        volumeMounts:
+          - name: nfs
+            mountPath: "/nsc"
+          - name: config-volume
+            mountPath: /etc/nats-config
+          - name: pid
+            mountPath: /var/run/nats
+          - name: nats-cloud-sts-vol
+            mountPath: /data/jetstream
+        resources:
+          requests:
+            cpu: 0
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "/nats-server -sl=ldm=/var/run/nats/nats.pid && /bin/sleep 60"]

@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nsc-edge
+spec:
+  template:
+    metadata:
+      name: nsc-edge
+    spec:
+      containers:
+        - name: nsc-edge
+          image: natsio/nats-box:latest
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "nsc add account -n A && nsc add user -n a && nsc push -a A"
+          volumeMounts:
+            - name: nfs
+              mountPath: "/nsc"
+      restartPolicy: Never
+      volumes:
+        - name: nfs
+          nfs:
+            server: 172.19.0.5
+            path: "/"

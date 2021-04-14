@@ -1,0 +1,14 @@
+---
+apiVersion: jetstream.nats.io/v1beta1
+kind: Consumer
+metadata:
+  name: samplecon
+spec:
+  servers: ["nats://nats-edge.default.svc.cluster.local:4222"]
+  streamName: samplestr
+  durableName: samplecon
+  deliverPolicy: all
+  filterSubject: samplestr.samplecon
+  maxDeliver: 20
+  ackPolicy: explicit
+  maxAckPending: 1
