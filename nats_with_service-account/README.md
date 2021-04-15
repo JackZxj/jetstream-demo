@@ -43,6 +43,11 @@ $ docker pull synadia/nats-server:nightly-20210412
 $ kind load docker-image synadia/nats-server:nightly-20210412 --name nats
 
 $ kubectl get all -A --context kind-nats
+
+# get current context
+$ kubectl config current-context
+# switch current context to kind-nats
+$ kubectl config use-context kind-nats
 ```
 
 ## Start
@@ -56,9 +61,9 @@ $ docker run -d --name nfs --privileged -v $(pwd)/nats-accounts:/accounts -e SHA
 ###############################################################
 
 # prepare NATS system account
-$ kubectl apply -f nsc-init.yaml --context kind-nats
+$ kubectl apply -f nsc-init.yaml
 # you can get logs like this:
-$ kubectl logs nsc-init-shr9z --context kind-nats
+$ kubectl logs nsc-init-shr9z
 [ OK ] generated and stored operator key "ODADDEDJHRMLXRVMX4YLFRWEAKPGFXRAUX3V4PPNUPPB5M4JRO2KEOXG"
 [ OK ] added operator "inspur"
 [ OK ] When running your own nats-server, make sure they run at least version 2.2.0
@@ -73,11 +78,11 @@ $ kubectl logs nsc-init-shr9z --context kind-nats
 
 # start NATS cloud cluster
 # NOTE: in fact, the nodes should use different resolver path
-$ kubectl apply -f nats-cloud.yaml --context kind-nats
+$ kubectl apply -f nats-cloud.yaml
 # wait for one of nats-cloud ready, push the system account to NATS cluster
-$ kubectl apply -f nsc-2init.yaml --context kind-nats
+$ kubectl apply -f nsc-2init.yaml
 # you can get logs like this:
-$ kubectl logs nsc-2init-5twh5 --context kind-nats
+$ kubectl logs nsc-2init-5twh5
 [ OK ] strict signing key usage set to: false
 [ OK ] set account jwt server url to "nats://nats-cloud.default.svc.cluster.local:4222"
 [ OK ] added service url "nats://nats-cloud.default.svc.cluster.local:4222"
@@ -90,9 +95,9 @@ $ kubectl logs nsc-2init-5twh5 --context kind-nats
 
 
 # create a account for jetstream leafnode
-$ kubectl apply -f nsc-edge.yaml --context kind-nats
+$ kubectl apply -f nsc-edge.yaml
 # you can get logs like this:
-$ kubectl logs nsc-edge-kwqrz  --context kind-nats
+$ kubectl logs nsc-edge-kwqrz
 [ OK ] generated and stored account key "AB6MAVUM62FFSJ73HHCJM6KY2JOCAEKW6O6YDHTEEHRJCP7OA7V5UZQ2"
 [ OK ] added account "A"
 [ OK ] generated and stored user key "UAFBVDKH2KU4IXLT5KTOCQGTTD3NPLH47TJTJATQBJCXNEROTYREKAEE"
@@ -106,10 +111,10 @@ $ kubectl logs nsc-edge-kwqrz  --context kind-nats
 
 
 # create a configmap for jetstream leafnode. or you can use secret instead
-$ kubectl create configmap nats-edge-user-a --from-file=a.creds=$(pwd)/nats-accounts/nkeys/creds/inspur/A/a.creds --context kind-nats
-kubectl create configmap nats-edge-user-b --from-file=b.creds=$(pwd)/nats-accounts/nkeys/creds/inspur/B/b.creds --context kind-nats
+$ kubectl create configmap nats-edge-user-a --from-file=a.creds=$(pwd)/nats-accounts/nkeys/creds/inspur/A/a.creds
+kubectl create configmap nats-edge-user-b --from-file=b.creds=$(pwd)/nats-accounts/nkeys/creds/inspur/B/b.creds
 # start a jetstream leafnode
-$ kubectl apply -f nats-edge.yaml --context kind-nats
+$ kubectl apply -f nats-edge.yaml
 ```
 
 ## Testing
@@ -172,13 +177,13 @@ Acknowledged message
 ``` BASH
 # this image was built by myself, you can use the official image.
 $ kind load docker-image natsio/jetstream-controller:20210413 --name nats
-$ kubectl apply -f nack-crds.yml --context kind-nats
-$ kubectl apply -f nack-rbac.yml --context kind-nats
-$ kubectl apply -f nack-controller.yaml --context kind-nats
+$ kubectl apply -f nack-crds.yml
+$ kubectl apply -f nack-rbac.yml
+$ kubectl apply -f nack-controller.yaml
 
 # create stream & consumer
-$ kubectl apply -f sampleStr.yaml --context kind-nats
-$ kubectl apply -f sampleCon.yaml --context kind-nats
+$ kubectl apply -f sampleStr.yaml
+$ kubectl apply -f sampleCon.yaml
 
 # test the stream and consumer
 # terminal 2
@@ -207,22 +212,25 @@ Acknowledged message
 ## Remove
 
 ``` bash
-$ kubectl delete -f sampleCon.yaml --context kind-nats
-$ kubectl delete -f sampleStr.yaml --context kind-nats
+$ kubectl delete -f sampleCon.yaml
+$ kubectl delete -f sampleStr.yaml
 
-$ kubectl delete -f nack-controller.yaml --context kind-nats
-$ kubectl delete -f nack-rbac.yml --context kind-nats
-$ kubectl delete -f nack-crds.yml --context kind-nats
+$ kubectl delete -f nack-controller.yaml
+$ kubectl delete -f nack-rbac.yml
+$ kubectl delete -f nack-crds.yml
 
-$ kubectl delete -f nats-edge.yaml --context kind-nats
-$ kubectl delete configmap nats-edge-user-a --context kind-nats
-$ kubectl delete -f nsc-edge.yaml --context kind-nats
+$ kubectl delete -f nats-edge.yaml
+$ kubectl delete configmap nats-edge-user-a
+$ kubectl delete -f nsc-edge.yaml
 
-$ kubectl delete -f nsc-2init.yaml --context kind-nats
-$ kubectl delete -f nats-cloud.yaml --context kind-nats
-$ kubectl delete -f nsc-init.yaml --context kind-nats
+$ kubectl delete -f nsc-2init.yaml
+$ kubectl delete -f nats-cloud.yaml
+$ kubectl delete -f nsc-init.yaml
 
 $ rm -rf $(pwd)/nats-accounts/*
 
+# switch to default context
+# you can use `kubectl config view` to get contexts in kubernetes' config
+$ kubectl config use-context kubernetes-admin@kubernetes
 $ kind delete cluster --name nats
 ```
